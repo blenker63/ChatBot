@@ -8,5 +8,4 @@ import java.util.List;
 
 public interface NotificationTaskRepository extends JpaRepository<NotificationTask, Long> {
 
-
 }

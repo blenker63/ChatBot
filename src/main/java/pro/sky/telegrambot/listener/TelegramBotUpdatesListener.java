@@ -22,4 +22,56 @@ import java.util.regex.Pattern;
 
 @Service
 public class TelegramBotUpdatesListener implements UpdatesListener {
+    private Logger logger = LoggerFactory.getLogger(TelegramBotUpdatesListener.class);
 
+    @Autowired
+    private TelegramBot telegramBot;
+    @Autowired
+    private NotificationTaskRepository notificationTaskRepository;
+
+    @Autowired
+    private pro.sky.telegrambot.listener.Scheduled scheduled;
+    @PostConstruct
+    public void init() {
+        telegramBot.setUpdatesListener(this);
+    }
+
+    @Override
+    public int process(List<Update> updates) {
+        updates.forEach(update -> {
+            logger.info("Processing update: {}", update);
+            if (update.message().text().equals("/start")) {
+                SendMessage text = new SendMessage(update.message().chat().id(),
+                        "Привет " + update.message().from().firstName() + ". Добро пожаловать в чат!");
+                SendResponse sendResponse = telegramBot.execute(text);
+            } else {
+                String offers = update.message().text();
+                Pattern pattern = Pattern.compile("([0-9.:\\s]{16})(\\s)([\\W+]+)");
+                Matcher matcher = pattern.matcher(offers);
+                if (matcher.matches()) {
+                    LocalDateTime time = LocalDateTime.parse(matcher.group(1),
+                            DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"));
+                    String answer = matcher.group(3);
+                    NotificationTask notificationTask = new NotificationTask();
+                    notificationTask.setChatId(update.message().chat().id());
+                    notificationTask.setMessageText(answer);
+                    notificationTask.setLocalDateTime(time);
+                    notificationTaskRepository.save(notificationTask);
+                }
+            }
+
+            // Process your updates here
+        });
+
+        return UpdatesListener.CONFIRMED_UPDATES_ALL;
+    }
+
+    @Scheduled(cron = "0 0/1 * * * *")
+    public void run() {
+        scheduled.runTask()
+                .forEach(f->{
+                    SendMessage sendMessage = new SendMessage(f.getChatId(),f.getMessageText());
+                    SendResponse sendResponse = telegramBot.execute(sendMessage);
+                });
+    }
+}
